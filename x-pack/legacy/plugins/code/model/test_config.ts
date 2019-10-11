@@ -6,7 +6,7 @@
 
 export interface Repo {
   url: string;
-  path: string;
+  uri: string;
   language: string;
 }
 

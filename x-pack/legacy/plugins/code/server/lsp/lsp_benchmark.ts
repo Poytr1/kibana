@@ -10,11 +10,13 @@ import yaml from 'js-yaml';
 import { TestConfig, RequestType } from '../../model/test_config';
 import { TestRepoManager } from './test_repo_manager';
 import { LspTestRunner } from './lsp_test_runner';
+import { createTestServerOption } from '../test_utils';
 
 jest.setTimeout(300000);
 
 let repoManger: TestRepoManager;
-const resultFile = `benchmark_result_${Date.now()}.csv`;
+const resultFile = path.resolve(__dirname, `benchmark_result_${Date.now()}.csv`);
+const serverOptions = createTestServerOption();
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -22,13 +24,13 @@ function sleep(ms: number) {
 
 beforeAll(async () => {
   const config: TestConfig = yaml.safeLoad(fs.readFileSync('test_config.yml', 'utf8'));
-  repoManger = new TestRepoManager(config);
+  repoManger = new TestRepoManager(config, serverOptions);
   await repoManger.importAllRepos();
 });
 
 it('test Java lsp full', async () => {
   const repo = repoManger.getRepo('java');
-  const runner = new LspTestRunner(repo, RequestType.FULL, 10);
+  const runner = new LspTestRunner(repo, RequestType.FULL, 10, serverOptions);
   await runner.launchLspByLanguage();
   // sleep until jdt connection established
   await sleep(3000);
@@ -40,7 +42,7 @@ it('test Java lsp full', async () => {
 
 it('test Java lsp hover', async () => {
   const repo = repoManger.getRepo('java');
-  const runner = new LspTestRunner(repo, RequestType.HOVER, 10);
+  const runner = new LspTestRunner(repo, RequestType.HOVER, 10, serverOptions);
   await runner.launchLspByLanguage();
   // sleep until jdt connection established
   await sleep(3000);
@@ -52,7 +54,7 @@ it('test Java lsp hover', async () => {
 
 it('test ts lsp full', async () => {
   const repo = repoManger.getRepo('ts');
-  const runner = new LspTestRunner(repo, RequestType.FULL, 10);
+  const runner = new LspTestRunner(repo, RequestType.FULL, 10, serverOptions);
   await runner.launchLspByLanguage();
   await sleep(2000);
   await runner.sendRandomRequest();
@@ -64,7 +66,7 @@ it('test ts lsp full', async () => {
 
 it('test ts lsp hover', async () => {
   const repo = repoManger.getRepo('ts');
-  const runner = new LspTestRunner(repo, RequestType.HOVER, 10);
+  const runner = new LspTestRunner(repo, RequestType.HOVER, 10, serverOptions);
   await runner.launchLspByLanguage();
   await sleep(3000);
   await runner.sendRandomRequest();
@@ -76,6 +78,6 @@ it('test ts lsp hover', async () => {
 
 afterAll(async () => {
   // eslint-disable-next-line no-console
-  console.log(`result file ${path.resolve(__dirname)}/${resultFile} was saved!`);
-  await repoManger.cleanAllRepos();
+  console.log(`result file ${resultFile} was saved!`);
+  // await repoManger.cleanAllRepos();
 });

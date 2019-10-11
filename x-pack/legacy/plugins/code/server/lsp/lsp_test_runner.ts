@@ -7,6 +7,7 @@
 /* eslint-disable no-console */
 
 import fs from 'fs';
+import { dirname, join } from 'path';
 // @ts-ignore
 import * as sl from 'stats-lite';
 import _ from 'lodash';
@@ -18,10 +19,10 @@ import { JAVA, TYPESCRIPT } from './language_servers';
 import { RequestExpander } from './request_expander';
 import { TypescriptServerLauncher } from './ts_launcher';
 import { GitOperations } from '../git_operations';
-import { createTestServerOption } from '../test_utils';
 import { ConsoleLoggerFactory } from '../utils/console_logger_factory';
 import { LspRequest } from '../../model';
 import { Repo, RequestType } from '../../model/test_config';
+import { ServerOptions } from '../server_options';
 
 const requestTypeMapping = new Map<number, string>([
   [RequestType.FULL, 'full'],
@@ -46,19 +47,19 @@ interface Result {
   latency_std_dev: number;
 }
 
-const serverOptions = createTestServerOption();
-
 export class LspTestRunner {
   private repo: Repo;
   public result: Result;
   public proxy: RequestExpander | null;
   private requestType: RequestType;
   private times: number;
+  private readonly serverOptions: ServerOptions;
 
-  constructor(repo: Repo, requestType: RequestType, times: number) {
+  constructor(repo: Repo, requestType: RequestType, times: number, serverOptions: ServerOptions) {
     this.repo = repo;
     this.requestType = requestType;
     this.times = times;
+    this.serverOptions = serverOptions;
     this.proxy = null;
     this.result = {
       repoName: `${repo.url}`,
@@ -76,15 +77,18 @@ export class LspTestRunner {
       latency_avg: 0,
       latency_std_dev: 0,
     };
+    if (!fs.existsSync(dirname(serverOptions.workspacePath))) {
+      fs.mkdirSync(dirname(serverOptions.workspacePath));
+    }
     if (!fs.existsSync(serverOptions.workspacePath)) {
       fs.mkdirSync(serverOptions.workspacePath);
     }
   }
 
   public async sendRandomRequest() {
-    const repoPath: string = this.repo.path;
-    const files = await this.getAllFile();
-    const randomFile = files[Math.floor(Math.random() * files.length)];
+    const repoPath: string = join(this.serverOptions.repoPath, this.repo.uri);
+    const randomFile = 'src/models/User.ts';
+    console.log(`file://${repoPath}/${randomFile}`);
     await this.proxy!.initialize(repoPath);
     switch (this.requestType) {
       case RequestType.HOVER: {
@@ -92,7 +96,7 @@ export class LspTestRunner {
           method: 'textDocument/hover',
           params: {
             textDocument: {
-              uri: `file://${this.repo.path}/${randomFile}`,
+              uri: `file://${repoPath}/${randomFile}`,
             },
             position: this.randomizePosition(),
           },
@@ -109,7 +113,7 @@ export class LspTestRunner {
           method: 'textDocument/full',
           params: {
             textDocument: {
-              uri: `file://${this.repo.path}/${randomFile}`,
+              uri: `file://${repoPath}/${randomFile}`,
             },
             reference: false,
           },
@@ -188,10 +192,10 @@ export class LspTestRunner {
   }
 
   private async getAllFile() {
-    const gitOperator: GitOperations = new GitOperations(this.repo.path);
+    const gitOperator: GitOperations = new GitOperations(this.serverOptions.repoPath);
     try {
       const result: string[] = [];
-      const fileIterator = await gitOperator.iterateRepo('', 'HEAD');
+      const fileIterator = await gitOperator.iterateRepo(join(this.repo.uri, '.git'), 'HEAD');
       for await (const file of fileIterator) {
         const filePath = file.path!;
         if (filePath.endsWith(this.repo.language)) {
@@ -233,7 +237,7 @@ export class LspTestRunner {
   private async launchTypescriptLanguageServer() {
     const launcher = new TypescriptServerLauncher(
       '127.0.0.1',
-      serverOptions,
+      this.serverOptions,
       new ConsoleLoggerFactory(),
       TYPESCRIPT.embedPath!
     );
@@ -242,10 +246,10 @@ export class LspTestRunner {
 
   private async launchJavaLanguageServer() {
     // @ts-ignore
-    const installManager = new InstallManager(null, serverOptions);
+    const installManager = new InstallManager(null, this.serverOptions);
     const launcher = new JavaLauncher(
       '127.0.0.1',
-      serverOptions,
+      this.serverOptions,
       new ConsoleLoggerFactory(),
       installManager.installationPath(JAVA)
     );

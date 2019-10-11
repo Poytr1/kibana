@@ -7,26 +7,30 @@
 
 import fs from 'fs';
 import rimraf from 'rimraf';
+import { join } from 'path';
 
 import { TestConfig, Repo } from '../../model/test_config';
 import { prepareProjectByCloning } from '../test_utils';
+import { ServerOptions } from '../server_options';
 
 export class TestRepoManager {
   private repos: Repo[];
+  private readonly serverOptions: ServerOptions;
 
-  constructor(testConfig: TestConfig) {
+  constructor(testConfig: TestConfig, serverOptions: ServerOptions) {
     this.repos = testConfig.repos;
+    this.serverOptions = serverOptions;
   }
 
   public async importAllRepos() {
     for (const repo of this.repos) {
-      await prepareProjectByCloning(repo.url, repo.path);
+      await prepareProjectByCloning(repo.url, join(this.serverOptions.repoPath, repo.uri));
     }
   }
 
   public async cleanAllRepos() {
     this.repos.forEach(repo => {
-      this.cleanRepo(repo.path);
+      this.cleanRepo(join(this.serverOptions.repoPath, repo.uri));
     });
   }
 
